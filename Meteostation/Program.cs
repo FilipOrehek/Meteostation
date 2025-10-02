@@ -1,53 +1,32 @@
-﻿using System;
-using System.Net.Http;
+﻿using Microsoft.Extensions.Configuration;
+using System;
+using System.IO;
 using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Meteostation.Data;
+using static System.Collections.Specialized.BitVector32;
 
-// Nastavení URL meteostanice (lze načíst z konfigurace)
-const string weatherUrl = "https://pastebin.com/raw/PMQueqDV";
-
-var services = new ServiceCollection();
-services.AddDbContext<DatabaseContext>(options =>
-    options.UseSqlite("Data Source=weather.db")); // SQLite pro jednoduchost
-
-var provider = services.BuildServiceProvider();
-
-while (true)
+class Program
 {
-    using var scope = provider.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<DatabaseContext>();
-    await db.Database.MigrateAsync();
+    static async Task Main(string[] args)
+    {
+        // Načtení konfigurace
+        var config = new ConfigurationBuilder()
+            .SetBasePath(Directory.GetCurrentDirectory())
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+            .Build();
 
-    WeatherRecord record;
-    try
-    {
-        // Use the shared HttpClient for the operation
-        using var http = new HttpClient();
-        record = await WeatherRecord.FromUrlAsync(weatherUrl, httpClient: http);
-    }
-    catch (Exception ex)
-    {
-        // Shouldn't usually happen because FromUrlAsync handles exceptions, but be defensive
-        record = new WeatherRecord
+        string url = config["MeteoStationUrl"];
+
+        var meteo = new WeatherRecord(url);
+        var dbSaver = new DatabaseSaver("meteodata.db");
+
+        Console.WriteLine("Meteo downloader started...");
+
+        while (true)
         {
-            DownloadedAt = DateTime.UtcNow,
-            JsonData = null,
-            IsStationOnline = false,
-            ErrorMessage = ex.Message
-        };
+            string json = await meteo.GetDataAsJsonAsync();
+            Console.WriteLine(json);
+            dbSaver.Save(json);
+            await Task.Delay(TimeSpan.FromHours(1));
+        }
     }
-
-    try
-    {
-        await db.SaveWeatherRecordAsync(record);
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Chyba při ukládání do databáze: {ex.Message}");
-    }
-
-    Console.WriteLine($"[{DateTime.Now}] Záznam uložen. Online: {record.IsStationOnline}");
-    await Task.Delay(TimeSpan.FromHours(1));
 }

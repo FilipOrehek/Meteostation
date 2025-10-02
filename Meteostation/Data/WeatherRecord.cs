@@ -1,108 +1,109 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Net.Http;
-using System.Text.Json;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+using System.Text.Json;
+using System.Collections.Generic;
 
-namespace Meteostation.Data
+public class WeatherRecord
 {
-    public class WeatherRecord
-    {
-        public int Id { get; set; }
-        public DateTime DownloadedAt { get; set; }
-        public string? JsonData { get; set; }
-        public bool IsStationOnline { get; set; }
-        public string? ErrorMessage { get; set; }
+    private readonly string _url;
 
-        // Fetch XML from the specified URL, transform it into JSON and return a populated WeatherRecord.
-        public static async Task<WeatherRecord> FromUrlAsync(string url, HttpClient? httpClient = null)
+    public WeatherRecord(string url)
+    {
+        _url = url;
+    }
+
+    public async Task<string> GetDataAsJsonAsync()
+    {
+        try
         {
-            var record = new WeatherRecord
+            using HttpClient client = new HttpClient();
+            string xmlData = await client.GetStringAsync(_url);
+
+            XDocument doc = XDocument.Parse(xmlData);
+
+            var root = doc.Root;
+            if (root == null)
+                throw new Exception("Neplatné XML");
+
+            // hlavní atributy wario
+            var warioAttributes = new Dictionary<string, string>();
+            foreach (var attr in root.Attributes())
             {
-                DownloadedAt = DateTime.UtcNow
+                warioAttributes[attr.Name.LocalName] = attr.Value;
+            }
+
+            // input senzory
+            var inputSensors = new List<object>();
+            foreach (var sensor in root.Element("input").Elements("sensor"))
+            {
+                inputSensors.Add(new
+                {
+                    type = sensor.Element("type")?.Value,
+                    id = sensor.Element("id")?.Value,
+                    name = sensor.Element("name")?.Value,
+                    place = sensor.Element("place")?.Value,
+                    value = sensor.Element("value")?.Value
+                });
+            }
+
+            // output senzory
+            var outputSensors = new List<object>();
+            foreach (var sensor in root.Element("output").Elements("sensor"))
+            {
+                outputSensors.Add(new
+                {
+                    type = sensor.Element("type")?.Value,
+                    id = sensor.Element("id")?.Value,
+                    name = sensor.Element("name")?.Value,
+                    place = sensor.Element("place")?.Value,
+                    value = sensor.Element("value")?.Value
+                });
+            }
+
+            // variable
+            var variables = new Dictionary<string, string>();
+            foreach (var el in root.Element("variable").Elements())
+            {
+                variables[el.Name.LocalName] = el.Value;
+            }
+
+            // minmax
+            var minmax = new List<object>();
+            foreach (var el in root.Element("minmax").Elements("s"))
+            {
+                minmax.Add(new
+                {
+                    id = el.Attribute("id")?.Value,
+                    min = el.Attribute("min")?.Value,
+                    max = el.Attribute("max")?.Value
+                });
+            }
+
+            // final JSON objekt
+            var result = new
+            {
+                Station = warioAttributes,
+                Input = inputSensors,
+                Output = outputSensors,
+                Variables = variables,
+                MinMax = minmax,
+                DownloadedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
             };
 
-            var disposeClient = false;
-            if (httpClient == null)
+            return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (Exception ex)
+        {
+            var errorResult = new
             {
-                httpClient = new HttpClient();
-                disposeClient = true;
-            }
+                Error = "Meteostanice není dostupná",
+                Message = ex.Message,
+                DownloadedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+            };
 
-            try
-            {
-                var xml = await httpClient.GetStringAsync(url);
-                var doc = XDocument.Parse(xml);
-
-                // Convert XML to a POCO structure so it serializes nicely to JSON
-                object? ConvertElement(XElement el)
-                {
-                    // If element has no child elements, return its value (string)
-                    if (!el.HasElements)
-                    {
-                        return el.Value;
-                    }
-
-                    var dict = new Dictionary<string, object?>();
-
-                    // Include attributes
-                    foreach (var attr in el.Attributes())
-                    {
-                        dict[$"@{attr.Name.LocalName}"] = attr.Value;
-                    }
-
-                    // Process child elements
-                    foreach (var child in el.Elements())
-                    {
-                        var key = child.Name.LocalName;
-                        var value = ConvertElement(child);
-
-                        if (!dict.ContainsKey(key))
-                        {
-                            dict[key] = value;
-                        }
-                        else
-                        {
-                            // If existing value is not a list, convert it to a list
-                            if (dict[key] is List<object?> existingList)
-                            {
-                                existingList.Add(value);
-                            }
-                            else
-                            {
-                                var first = dict[key];
-                                dict[key] = new List<object?> { first, value };
-                            }
-                        }
-                    }
-
-                    return dict;
-                }
-
-                var root = doc.Root;
-                object? result = root != null ? new Dictionary<string, object?> { [root.Name.LocalName] = ConvertElement(root) } : null;
-
-                record.JsonData = JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
-                record.IsStationOnline = true;
-                record.ErrorMessage = null;
-            }
-            catch (Exception ex)
-            {
-                // If anything fails (network, parse), mark station as offline and record the error
-                record.JsonData = null;
-                record.IsStationOnline = false;
-                record.ErrorMessage = ex.Message;
-            }
-            finally
-            {
-                if (disposeClient)
-                {
-                    httpClient?.Dispose();
-                }
-            }
-
-            return record;
+            return JsonSerializer.Serialize(errorResult, new JsonSerializerOptions { WriteIndented = true });
         }
     }
 }
