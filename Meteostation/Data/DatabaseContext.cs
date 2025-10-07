@@ -87,7 +87,7 @@ public class DatabaseSaver
             cmd.Parameters.AddWithValue("@message", "Meteostation is not available");
             cmd.ExecuteNonQuery();
 
-            Console.WriteLine("⚠Meteostation is not available — saved error entry into database.");
+            Console.WriteLine("Meteostation is not available — saved error entry into database.");
             return;
         }
 
