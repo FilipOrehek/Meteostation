@@ -20,4 +20,6 @@
   </None>
   </ItemGroup>
 
+  <ProjectExtensions><VisualStudio><UserProperties appsettings_1json__JsonSchema="https://www.schemastore.org/architectfx.json" /></VisualStudio></ProjectExtensions>
+
 </Project>

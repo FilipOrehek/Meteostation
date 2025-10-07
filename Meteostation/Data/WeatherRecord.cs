@@ -25,16 +25,16 @@ public class WeatherRecord
 
             var root = doc.Root;
             if (root == null)
-                throw new Exception("Neplatné XML");
+                throw new Exception("Invalid XML");
 
-            // hlavní atributy wario
+            //Main attributes
             var warioAttributes = new Dictionary<string, string>();
             foreach (var attr in root.Attributes())
             {
                 warioAttributes[attr.Name.LocalName] = attr.Value;
             }
 
-            // input senzory
+            //Input sensors
             var inputSensors = new List<object>();
             foreach (var sensor in root.Element("input").Elements("sensor"))
             {
@@ -48,7 +48,7 @@ public class WeatherRecord
                 });
             }
 
-            // output senzory
+            //Output sensors
             var outputSensors = new List<object>();
             foreach (var sensor in root.Element("output").Elements("sensor"))
             {
@@ -62,14 +62,14 @@ public class WeatherRecord
                 });
             }
 
-            // variable
+            //Variable
             var variables = new Dictionary<string, string>();
             foreach (var el in root.Element("variable").Elements())
             {
                 variables[el.Name.LocalName] = el.Value;
             }
 
-            // minmax
+            //MinMax
             var minmax = new List<object>();
             foreach (var el in root.Element("minmax").Elements("s"))
             {
@@ -81,7 +81,7 @@ public class WeatherRecord
                 });
             }
 
-            // final JSON objekt
+            //final JSON object
             var result = new
             {
                 Station = warioAttributes,
@@ -98,7 +98,7 @@ public class WeatherRecord
         {
             var errorResult = new
             {
-                Error = "Meteostanice není dostupná",
+                Error = "Meteostation is not available",
                 Message = ex.Message,
                 DownloadedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
             };
